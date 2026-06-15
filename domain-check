@@ -1,0 +1,32 @@
+#!/bin/bash
+
+CPUSER=$(pwd | awk -F/ '{print $3}')
+
+echo "cPanel User: $CPUSER"
+echo "Fetching domains..."
+
+DOMAINS=$(grep "${CPUSER}==" /etc/userdatadomains | cut -d: -f1)
+
+if [ -z "$DOMAINS" ]; then
+    echo "No domains found for user $CPUSER"
+    exit 1
+fi
+
+ok=0
+err=0
+
+for d in $DOMAINS; do
+    code=$(curl -k -L -s -o /dev/null -w "%{http_code}" "https://$d" \
+        --connect-timeout 10 --max-time 15)
+
+    if [ "$code" = "000" ]; then
+        echo "$d : ERROR"
+        ((err++))
+    else
+        echo "$d : $code"
+        ((ok++))
+    fi
+done
+
+echo "----"
+echo "OK: $ok | ERROR: $err"
