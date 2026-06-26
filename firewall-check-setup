@@ -1,0 +1,19 @@
+if [ -f /usr/local/bin/firewall-check ]; then
+    echo "Firewall Checker installed"
+    echo "Run:"
+    echo "firewall-check"
+    echo
+    echo "Remove this? Run"
+    echo "firewall-check-remove"
+    echo
+else
+    wget -O /usr/local/bin/firewall-check https://raw.githubusercontent.com/HanifPaan/crawl/refs/heads/server/firewall-check && chmod +x /usr/local/bin/firewall-check
+    wget -O /usr/local/bin/firewall-check-remove https://raw.githubusercontent.com/HanifPaan/crawl/refs/heads/server/firewall-check-remove && chmod +x /usr/local/bin/firewall-check-remove
+    echo
+    echo "Run:"
+    echo "firewall-check"
+    echo
+    echo "Remove this? Run"
+    echo "firewall-check-remove"
+    echo
+fi
