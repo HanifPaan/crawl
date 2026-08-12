@@ -3,7 +3,7 @@ if [ -f /usr/local/bin/firewall-check ]; then
     echo "Run:"
     echo "firewall-check"
     echo
-    echo "Remove this? Run"
+    echo "Remove this tool? Run"
     echo "firewall-check-remove"
     echo
 else
@@ -13,7 +13,7 @@ else
     echo "Run:"
     echo "firewall-check"
     echo
-    echo "Remove this? Run"
+    echo "Remove this tool? Run"
     echo "firewall-check-remove"
     echo
 fi
