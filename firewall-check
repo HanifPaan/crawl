@@ -1,22 +1,45 @@
 #!/bin/bash
 
+# Define ANSI color codes
+GREEN="\033[32m"
+RED="\033[31m"
+RESET="\033[0m"
+
 echo "=========================================================================="
 printf "%-50s %-12s %-35s\n" "DEFAULT FIREWALL SERVICES" "STATUS" "DESCRIPTION"
 echo "=========================================================================="
 
-systemctl list-units --type=service --all --no-pager | grep -E 'firewall|firewalld|ufw|nft|iptables|csf|lfd|apf|ferm|shorewall|imunify360-agent.service' | grep -v -E 'sf-whm-|not-found|masked|imunify360-resource-unlock|failed' | awk '{print $1,$3,$5" "$6}' | sort -k2,2 | awk '{printf "%-50s %-12s %-35s\n",$1,$2,$3" "$4}'
+systemctl list-units --type=service --all --no-pager 2>/dev/null | \
+    grep -E 'firewall|firewalld|ufw|nft|iptables|csf|lfd|apf|ferm|shorewall|imunify360-agent\.service' | \
+    grep -v -E 'sf-whm-|not-found|masked|imunify360-resource-unlock|failed' | \
+    sort -k2,2 | \
+    awk -v green="$GREEN" -v red="$RED" -v reset="$RESET" '{
+        desc = "";
+        for (i=5; i<=NF; i++) desc = desc (i==5 ? "" : " ") $i;
+        status = $3;
+        if (status == "active") status = green status reset;
+        else if (status == "inactive" || status == "dead") status = red status reset;
+        printf "%-50s %-21s %-35s\n", $1, status, desc
+    }'
 
 echo ""
 echo "=========================================================================="
 printf "%-50s %-12s %-35s\n" "SERVERFREAK FIREWALL" "STATUS" "DESCRIPTION"
 echo "=========================================================================="
 
-SFWHM=$(systemctl list-units --type=service --all --no-pager | grep -E 'sf-whm-' | grep -v -E 'not-found|masked' | awk '{print $1,$3,$5" "$6}' | sort -k2,2)
+SFWHM=$(systemctl list-units --type=service --all --no-pager 2>/dev/null | awk '$1 == "sf-whm-block.service"')
 
 if [ -n "$SFWHM" ]; then
-    echo "$SFWHM" | awk '{printf "%-50s %-12s %-35s\n",$1,$2,$3" "$4}'
+    echo "$SFWHM" | awk -v green="$GREEN" -v red="$RED" -v reset="$RESET" '{
+        desc = "";
+        for (i=5; i<=NF; i++) desc = desc (i==5 ? "" : " ") $i;
+        status = $3;
+        if (status == "active") status = green status reset;
+        else if (status == "inactive" || status == "dead") status = red status reset;
+        printf "%-50s %-21s %-35s\n", $1, status, desc
+    }'
 else
-    printf "%-50s\n" "                                  NONE                                  " 
+    printf "%-50s %-12s %-35s\n" "NONE" "-" "N/A"
 fi
 
-echo "==========================================================================" 
+echo "=========================================================================="
