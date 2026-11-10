@@ -1,0 +1,90 @@
+#!/bin/bash
+# Check HTTP status of every domain owned by a cPanel user.
+#
+# Usage:  ./check_sites.sh [cpanel_user]
+#         (no arg = take user from current dir, e.g. /home/bob/public_html -> bob)
+#
+# Env options:
+#   LOCAL_IP=1.2.3.4   hit THIS server directly, ignore DNS (good for migrations / pre-DNS checks)
+#   JOBS=10            how many domains to check in parallel
+
+CPUSER="${1:-$(pwd | awk -F/ '$2 ~ /^home/ {print $3}')}"
+JOBS="${JOBS:-10}"
+UDD="${UDD:-/etc/userdatadomains}"
+
+if [ -z "$CPUSER" ]; then
+    echo "Usage: $0 <cpanel_user>   (or run it from inside /home/<user>/)" >&2
+    exit 1
+fi
+
+echo "cPanel User: $CPUSER"
+echo "Fetching domains..."
+
+# Line format: "domain: user==owner==type==...".
+# Match ONLY the first field (the real owner) - a plain grep "user==" also matches
+# the reseller/owner field and substrings (bob matches jimbob==).
+# Wildcard (*.domain) entries are skipped.
+mapfile -t DOMAINS < <(
+    awk -F': ' -v u="$CPUSER" '{ split($2, a, "=="); if (a[1] == u) print $1 }' "$UDD" \
+    | grep -v '^\*' | sort -u
+)
+
+if [ "${#DOMAINS[@]}" -eq 0 ]; then
+    echo "No domains found for user $CPUSER"
+    exit 1
+fi
+
+echo "Checking ${#DOMAINS[@]} domains (${JOBS} at a time)..."
+echo
+
+check() {
+    local d="$1" resolve=() out rc code ssl why
+    if [ -n "$LOCAL_IP" ]; then
+        resolve=(--resolve "$d:443:$LOCAL_IP" --resolve "$d:80:$LOCAL_IP")
+    fi
+
+    out=$(curl -k -L -s -o /dev/null \
+            -w '%{http_code} %{ssl_verify_result}' \
+            "${resolve[@]}" \
+            --connect-timeout 10 --max-time 15 \
+            "https://$d")
+    rc=$?
+    read -r code ssl <<<"$out"
+
+    if [ "$rc" -ne 0 ]; then
+        case $rc in
+            6)  why="DNS lookup failed" ;;
+            7)  why="connection refused" ;;
+            28) why="timeout" ;;
+            35) why="SSL handshake failed" ;;
+            47) why="too many redirects" ;;
+            52|56) why="empty reply / connection reset" ;;
+            *)  why="curl error $rc" ;;
+        esac
+        printf '%-5s %-45s %s\n' "ERROR" "$d" "$why"
+        return
+    fi
+
+    # -k still lets us see if the cert is bad, so warn about it
+    [ "$ssl" != "0" ] && ssl_note=" (SSL cert invalid)" || ssl_note=""
+
+    case $code in
+        2??|3??) printf '%-5s %-45s %s\n' "OK"   "$d" "$code$ssl_note" ;;
+        *)       printf '%-5s %-45s %s\n' "FAIL" "$d" "$code$ssl_note" ;;
+    esac
+}
+export -f check
+export LOCAL_IP
+
+results=$(printf '%s\n' "${DOMAINS[@]}" | xargs -P "$JOBS" -I{} bash -c 'check "$1"' _ {})
+
+# Problems first, then OK
+grep -E '^(ERROR|FAIL)' <<<"$results" | sort -k2
+grep -E '^OK'           <<<"$results" | sort -k2
+
+ok=$(grep -c '^OK '    <<<"$results")
+fail=$(grep -c '^FAIL ' <<<"$results")
+err=$(grep -c '^ERROR ' <<<"$results")
+
+echo "----"
+echo "OK: $ok | FAIL (4xx/5xx): $fail | ERROR (no response): $err"
